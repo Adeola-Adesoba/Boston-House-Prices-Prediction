@@ -1,0 +1,281 @@
+import sklearn.datasets as dt
+import numpy as np
+import pandas as pd
+import sklearn as sk
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statsmodels.api as sm
+import pylab
+import pandas.tseries
+import warnings
+
+
+%matplotlib inline
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+boston = dt.load_boston()
+
+# for key in boston.keys(): print("Key:", key, ">>  Data Type:", type(boston[key]))
+# print(type(boston))
+
+print(boston.DESCR)
+
+# Data Understanding (Exploratory Data Analysis)
+#Review the dataset to understand the structure and format of the data available for modelling
+ #Load the data from scikit-learn dataset Bunch object into a pandas DataFrame 
+# print(type(boston))
+df_boston = pd.DataFrame(boston.data, index=np.arange(506), columns=boston.feature_names)  
+df_boston["Bk"] = np.sqrt(df_boston["B"] / 1000) + 0.63
+df_boston["MEDV"] = pd.Series(boston.target, index=np.arange(506))
+
+sns.set_style("darkgrid")
+
+print(df_boston.shape)
+print("=================================================================")
+print(df_boston.head())
+
+# To enhance understanding of the data, graphs and plots provide a visual aid
+def plotVariable(x, y, df):
+    plt.subplot(221)
+    p1 = sns.regplot(df[x], df[y])
+    plt.xlabel(x, fontsize=12, fontweight='bold')
+    plt.ylabel("MEDV (Target)", fontsize=12, fontweight='bold')
+    p1.text(0.95, 0.95, 'Pearson Corr: ' + str(np.corrcoef(df[x], df[y])[0, 1]), verticalalignment='top', horizontalalignment='right',
+        transform=p1.transAxes, color='red', fontsize=12)
+
+    plt.subplot(222)
+    p2 = sns.regplot(np.log10(df[x]), df[y])
+    plt.xlabel("Log10(" + x + ")", fontsize=12, fontweight='bold')
+    plt.ylabel("MEDV (Target)", fontsize=12, fontweight='bold')
+    p2.text(0.95, 0.95, 'Pearson Corr: ' + str(np.corrcoef(np.log10(df[x]), df[y])[0, 1]), verticalalignment='top', horizontalalignment='right',
+        transform=p2.transAxes, color='red', fontsize=12)
+
+    plt.subplot(223)
+    p3 = sns.regplot(np.reciprocal(df[x]), df[y])
+    plt.xlabel("1 / " + x, fontsize=12, fontweight='bold')
+    plt.ylabel("MEDV (Target)", fontsize=12, fontweight='bold')
+    p3.text(0.95, 0.95, 'Pearson Corr: ' + str(np.corrcoef(np.reciprocal(df[x]), df[y])[0, 1]), verticalalignment='top', horizontalalignment='right',
+        transform=p3.transAxes, color='red', fontsize=12)
+
+    plt.subplot(224)
+    p4 = sns.regplot(np.power(df[x], 2), df[y])
+    plt.xlabel(x + " ^ 2", fontsize=12, fontweight='bold')
+    plt.ylabel("MEDV (Target)", fontsize=12, fontweight='bold')
+    p4.text(0.95, 0.95, 'Pearson Corr: ' + str(np.corrcoef(np.power(df[x], 2), df[y])[0, 1]), verticalalignment='top', horizontalalignment='right',
+        transform=p4.transAxes, color='red', fontsize=12)
+
+    fig = plt.gcf()
+    fig.set_size_inches(14, 10)
+    #fig.set_tight_layout(tight=True)
+    fig.suptitle("Scatter Plots & Correlation Co-eff for Variable MEDV/" + x, fontsize=22, fontweight='bold')
+
+    plt.show()
+    
+    return 0
+
+# Execute this call for the input variables in dataset. plotVariable(input, target, dataframe)
+plotVariable("LSTAT", "MEDV", df_boston) 
+
+# Helper function to summarize important characteristics of variables in a dataset
+def summarize(data): 
+    '''
+        Method to summarize important characteristics of the continuous variables in a DataFrame
+        
+        data: DataFrame containing the variables to be summarized
+    '''
+    col_count = 0
+    cols_df = pd.DataFrame({"A": 0}, index=np.array([0]))
+    for cols in data.columns:
+        col_type = str(data[cols].dtype)
+        if col_count == 0:  
+            cols_df = pd.DataFrame({"VAR_NAME": cols, "TYPE": data[cols].dtype, "CORR_TARGET": np.corrcoef(data[cols], data["MEDV"])[0][1], "MEAN": np.mean(data[cols]), "SKEW": data[cols].skew(), "KURT": data[cols].kurt(), "MIN": np.min(data[cols]), "MAX": np.max(data[cols]), "STDEV": np.std(data[cols]), "COUNT":  len(data[cols]), "MISSING": np.sum(pd.isnull(data[cols])), "TMIN": np.mean(data[cols]) - (3 * np.std(data[cols])), "TMAX": np.mean(data[cols]) + (3 * np.std(data[cols]))}, index=np.array([col_count]))
+        else:
+            cols_df = cols_df.append(pd.DataFrame({"VAR_NAME": cols, "TYPE": data[cols].dtype, "CORR_TARGET": np.corrcoef(data[cols], data["MEDV"])[0][1], "MEAN": np.mean(data[cols]), "SKEW": data[cols].skew(), "KURT": data[cols].kurt(), "MIN": np.min(data[cols]), "MAX": np.max(data[cols]), "STDEV": np.std(data[cols]), "COUNT":  len(data[cols]), "MISSING": np.sum(pd.isnull(data[cols])), "TMIN": np.mean(data[cols]) - (3 * np.std(data[cols])), "TMAX": np.mean(data[cols]) + (3 * np.std(data[cols]))}, index=np.array([col_count])))
+        col_count += 1
+    cols_df = cols_df[["VAR_NAME", "TYPE", "COUNT", "MISSING", "CORR_TARGET", "MEAN", "STDEV", "MIN", "MAX", "SKEW", "KURT", "TMIN", "TMAX"]]
+    return cols_df
+
+def summarize_cat(data):
+    col_count = 0
+    cols_df = pd.DataFrame({"A": 0}, index=np.array([0]))
+    for cols in data.columns:
+        col_type = str(data[cols].dtype)
+        if col_count == 0: 
+            continue
+    return cols_df        
+    
+    def r_squared_adj(r_squared, n, k):
+    '''
+        Method that computes the Adjusted R-Squared value of a regression model based on the R-Squared value.
+        
+        r_squared: The coefficient of determination 
+        n: The total number of records in the sample
+        k: The total number of predictors in the sample
+    '''
+    val = 1 - ((1 - r_squared) * ((n - 1) / (n - k - 1)))
+    return val
+    
+    # Data Preparation
+    The tasks to be executed will be determined exploratory data analysis
+    The actual transformation tasks are executed below:
+    
+    # Functions for cleansing and transformations
+df_boston_regr = (df_boston
+                        .assign(CRIM=lambda x: np.log10(x['CRIM']),
+                                INDUS=lambda x: np.log10(x['INDUS']),
+                                LSTAT=lambda x: np.log10(x['LSTAT']),
+                                DIS=lambda x: np.reciprocal(x['LSTAT']),
+                                CHAS=lambda x: pd.Categorical(x['CHAS'].astype(int)))
+                 )
+
+# print(pd.crosstab(df_boston_regr.CHAS, columns="Count"))
+# print(df_boston_regr.describe())
+
+-Modeling
+.First we build baseline model that is based on data in it's untransformed state. The resulting model will serve as a baseline for comparison with other models.  
+.Next we build a model using the sample machine learing algorithm using the transformed data. Compare this model with the baseline to see the effect of transformations.
+
+#Linear Regression Models
+-Build the baseline Linear Regression model. Use the dataset without the transformations (df_boston)
+
+from sklearn.model_selection import cross_val_score, KFold
+from sklearn.linear_model import LinearRegression
+from sklearn.feature_selection import RFECV
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+# split into input (X) and target (y) variables
+X = df_boston[["CRIM", "ZN", "INDUS", "CHAS", "NOX", "RM", "AGE", "DIS", "RAD", "TAX", "PTRATIO", "B", "LSTAT" ]]
+y = df_boston["MEDV"].values
+
+# Split data into train & test samples train 80% while test 20%
+X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.20, random_state=42)
+
+# Scale the training data to reduce the effect of larger valued variables on smaller ones
+scalerX = StandardScaler().fit(X_train)
+Stan_X = pd.DataFrame(scalerX.transform(X_train), index=X_train.index, columns=X_train.columns)
+scalerY = StandardScaler().fit(y_train.reshape(y_train.shape[0], 1))
+Stan_y = scalerY.transform(y_train.reshape(y_train.shape[0], 1))
+
+# Create regression estimator and set hyper-parameters
+lin_reg = LinearRegression(fit_intercept = True, normalize = False)
+
+# Create the rfe object to recursively select best features by leveraging cross-validation 
+kfold = KFold(n_splits=6, random_state=42, shuffle=False)
+rfecv = RFECV(estimator=lin_reg, step=1, cv=kfold)
+rfecv.fit(X, y)
+
+# Review the optimal features selected by the recursive elimination process
+print("\n#----------------------------- Results of the Recursive Feature Elimination Process------------------------#")
+print("Optimal number of features: %d" % rfecv.n_features_)
+print("List of optimal features: ", X.columns[rfecv.support_])
+print("Assigned score of optimal features: ", rfecv.grid_scores_)
+
+# Select columns based on recursive feature extraction to be use for linear regression model
+cols = X.columns[rfecv.support_]
+
+# Build a model with the optimal columns selected earlier
+reg_model_a = lin_reg.fit(Stan_X[cols], Stan_y)
+print("\n#----------------------- Results of Model A - Developed with 6 Top Features from RFE ----------------------#")
+print("Regression coefficients of Model A: ", reg_model_a.coef_)
+print("Intercept coefficient of Model A: ", reg_model_a.intercept_)
+print("Rank of Model A: ", reg_model_a.rank_)
+print("R^2 Model A: ", reg_model_a.score(Stan_X[cols], Stan_y))
+print("R^2 Adj. Model A: ", r_squared_adj(reg_model_a.score(Stan_X[cols], Stan_y), len(y), len(cols)))
+
+# Build a model with the optimal columns selected earlier
+reg_model_b = lin_reg.fit(Stan_X, Stan_y)
+print("\n#--------------------- Results of Model B - Developed with all 13 Features in Dataset ---------------------#")
+print("Regression coefficients of Model B: ", reg_model_b.coef_)
+print("Intercept coefficient of Model B: ", reg_model_b.intercept_)
+print("Rank of Model B: ", reg_model_b.rank_)
+print("R^2 Model B: ", reg_model_b.score(Stan_X, Stan_y))
+print("R^2 Adj. Model B: ", r_squared_adj(reg_model_b.score(Stan_X, Stan_y), len(y), len(X.columns)))
+
+# Scale the hold-out sample to be used for testing using the same scaler used on the training data
+Stan_X_valid = pd.DataFrame(scalerX.transform(X_valid), index=X_valid.index, columns=X_valid.columns)
+Stan_y_valid = scalerY.transform(y_valid.reshape(y_valid.shape[0], 1))
+
+print("\n#------------------ Results of Selected Model B on Previously Unseen Data (Test Dataset) ------------------#")
+print("R^2 Model B (Validation): ", reg_model_b.score(Stan_X_valid, Stan_y_valid))
+print("R^2 Adj. Model B (Validation): ", r_squared_adj(reg_model_b.score(Stan_X_valid, Stan_y_valid), len(y), len(X.columns)))
+
+#Build the first iteration Linear Regression model. Use the dataset that has been transformed (df_boston_regr)
+from sklearn.model_selection import cross_val_score, KFold
+from sklearn.linear_model import LinearRegression
+from sklearn.feature_selection import RFECV
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+# split into input (X) and target (y) variables
+X = df_boston_regr[["CRIM", "ZN", "INDUS", "CHAS", "NOX", "RM", "AGE", "DIS", "RAD", "TAX", "PTRATIO", "B", "LSTAT" ]]
+y = df_boston_regr["MEDV"].values
+
+# Split data into train & test samples
+X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.20, random_state=42)
+
+# Scale the training data to reduce the effect of larger valued variables on smaller ones
+scalerX = StandardScaler().fit(X_train)
+Stan_X = pd.DataFrame(scalerX.transform(X_train), index=X_train.index, columns=X_train.columns)
+scalerY = StandardScaler().fit(y_train.reshape(y_train.shape[0], 1))
+Stan_y = scalerY.transform(y_train.reshape(y_train.shape[0], 1))
+
+# Create regression estimator and set hyper-parameters
+lin_reg = LinearRegression(fit_intercept = True, normalize = False)
+
+# Create the rfe object to recursively select best features by leveraging cross-validation 
+kfold = KFold(n_splits=6, random_state=42, shuffle=False)
+rfecv = RFECV(estimator=lin_reg, step=1, cv=kfold)
+rfecv.fit(X, y)
+
+# Review the optimal features selected by the recursive elimination process
+print("\n#----------------------------- Results of the Recursive Feature Elimination Process------------------------#")
+print("Optimal number of features: %d" % rfecv.n_features_)
+print("List of optimal features: ", X.columns[rfecv.support_])
+print("Assigned score of optimal features: ", rfecv.grid_scores_)
+
+# Select columns based on recursive feature extraction to be use for linear regression model
+cols = X.columns[rfecv.support_]
+
+# Build a model with the optimal columns selected earlier
+reg_model_a = lin_reg.fit(Stan_X[cols], Stan_y)
+print("\n#----------------------- Results of Model A - Developed with 7 Top Features from RFE ----------------------#")
+print("Regression coefficients of Model A: ", reg_model_a.coef_)
+print("Intercept coefficient of Model A: ", reg_model_a.intercept_)
+print("Rank of Model A: ", reg_model_a.rank_)
+print("R^2 Model A: ", reg_model_a.score(Stan_X[cols], Stan_y))
+print("R^2 Adj. Model A: ", r_squared_adj(reg_model_a.score(Stan_X[cols], Stan_y), len(y), len(cols)))
+
+# Build a model with the optimal columns selected earlier
+reg_model_b = lin_reg.fit(Stan_X, Stan_y)
+print("\n#--------------------- Results of Model B - Developed with all 13 Features in Dataset ---------------------#")
+print("Regression coefficients of Model B: ", reg_model_b.coef_)
+print("Intercept coefficient of Model B: ", reg_model_b.intercept_)
+print("Rank of Model B: ", reg_model_b.rank_)
+print("R^2 Model B: ", reg_model_b.score(Stan_X, Stan_y))
+print("R^2 Adj. Model B: ", r_squared_adj(reg_model_b.score(Stan_X, Stan_y), len(y), len(X.columns)))
+
+# Scale the hold-out sample to be used for testing using the same scaler used on the training data
+Stan_X_valid = pd.DataFrame(scalerX.transform(X_valid), index=X_valid.index, columns=X_valid.columns)
+Stan_y_valid = scalerY.transform(y_valid.reshape(y_valid.shape[0], 1))
+
+print("\n#------------------ Results of Selected Model B on Previously Unseen Data (Test Dataset) ------------------#")
+print("R^2 Model B (Validation): ", reg_model_b.score(Stan_X_valid, Stan_y_valid))
+print("R^2 Adj. Model B (Validation): ", r_squared_adj(reg_model_b.score(Stan_X_valid, Stan_y_valid), len(y), len(X.columns)))
+
+#Decision Tree Regression Models
+-Apply the DecisionTreeRegressor object in the scikit-learn package to build models using the dataset above.
+-Build two models like we did for Linear Regression above. Baseline & First Iteration models.
+
+from sklearn.datasets import load_boston
+from sklearn.model_selection import cross_val_score
+from sklearn.tree import DecisionTreeRegressor
+boston = load_boston()
+regressor = DecisionTreeRegressor(random_state=0)
+cross_val_score(regressor, boston.data, boston.target, cv=15)
+
+
+#Splitting dataset into #test and #train data
